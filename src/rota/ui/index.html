@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rota</title>
+<style>
+  :root { --bg: #fafafa; --fg: #1b1b1b; --muted: #6b6b6b; --line: #e3e3e3; --card: #fff; --accent: #2b6cb0;
+          --queued: #8a6d00; --held: #9c4a00; --running: #1f6f3f; --succeeded: #2b6cb0; --failed: #b42318; --cancelled: #6b6b6b; --skipped: #6b6b6b; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141414; --fg: #ededed; --muted: #9a9a9a; --line: #2a2a2a; --card: #1c1c1c; --accent: #7fb3ff;
+          --queued: #e3b341; --held: #ff9a4a; --running: #5fd38d; --succeeded: #7fb3ff; --failed: #ff7b6b; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; } .sub { color: var(--muted); margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; } tr.job { cursor: pointer; } tr.job:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .st { font-weight: 600; } .st-queued { color: var(--queued); } .st-held { color: var(--held); } .st-running { color: var(--running); }
+  .st-succeeded { color: var(--succeeded); } .st-failed { color: var(--failed); } .st-cancelled, .st-skipped { color: var(--cancelled); }
+  .cmd { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .locks span { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; margin-right: 4px; font-size: 12px; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; max-height: 50vh; font-size: 12px; }
+  .detail { margin: 12px 0; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  .detail dt { color: var(--muted); font-size: 12px; } .detail dd { margin: 0 0 8px; }
+  button { font: inherit; padding: 4px 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 6px; cursor: pointer; }
+  .filters { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .filters label { color: var(--muted); }
+  .locksbar { color: var(--muted); margin-bottom: 10px; }
+  @media (max-width: 700px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>rota</h1>
+  <div class="sub" id="sub">connecting…</div>
+  <div class="locksbar" id="locks"></div>
+  <div class="filters">
+    <label>show</label>
+    <select id="filter"><option value="">all</option><option value="queued,held,running">active</option><option value="running">running</option><option value="queued,held">waiting</option><option value="failed,skipped">failed</option><option value="succeeded">succeeded</option></select>
+    <label><input type="checkbox" id="auto" checked> auto-refresh</label>
+    <button id="refresh">refresh</button>
+  </div>
+  <div id="detail"></div>
+  <table><thead><tr><th>id</th><th>status</th><th class="hide-sm">queued</th><th class="hide-sm">took</th><th>locks</th><th>job</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  let token = params.get('token'); try { if (token) sessionStorage.setItem('rota_token', token); else token = sessionStorage.getItem('rota_token'); } catch (e) {}
+  if (params.get('token')) history.replaceState(null, '', location.pathname);
+  const api = (path, opts = {}) => fetch(path, { ...opts, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts.headers || {}) } }).then(r => { if (!r.ok) throw new Error(r.status); return r; });
+  const ago = ts => { if (!ts) return '-'; const s = Math.round(Date.now() / 1000 - ts); return s < 60 ? s + 's' : s < 3600 ? Math.floor(s / 60) + 'm' : Math.floor(s / 3600) + 'h' + String(Math.floor(s % 3600 / 60)).padStart(2, '0'); };
+  const took = j => { if (!j.started_at) return '-'; const s = Math.round((j.finished_at || Date.now() / 1000) - j.started_at); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0'); };
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let selected = null;
+  async function refresh() {
+    try {
+      const status = document.getElementById('filter').value;
+      const [jobs, locks] = await Promise.all([api('/jobs?limit=200' + (status ? '&status=' + status : '')).then(r => r.json()), api('/locks').then(r => r.json())]);
+      document.getElementById('sub').textContent = `${jobs.filter(j => j.status === 'running').length} running · ${jobs.filter(j => ['queued', 'held'].includes(j.status)).length} waiting · updated ${new Date().toLocaleTimeString()}`;
+      document.getElementById('locks').textContent = Object.entries(locks).map(([n, l]) => `${n}: ${l.held_by.length}/${l.capacity}${l.held_by.length ? ' (job ' + l.held_by.join(', ') + ')' : ''}`).join('   ') || 'no locks in use';
+      document.getElementById('rows').innerHTML = jobs.map(j => `<tr class="job" data-id="${j.id}"><td>${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`).join('');
+      if (selected) showDetail(selected);
+    } catch (e) { document.getElementById('sub').textContent = 'cannot reach the daemon (' + e.message + ')' + (token ? '' : ' — open the URL printed by `rota ui`, it carries the token'); }
+  }
+  async function showDetail(id) {
+    selected = id;
+    const [job, log] = await Promise.all([api('/jobs/' + id).then(r => r.json()), api('/jobs/' + id + '/log?tail=200').then(r => r.text())]);
+    const rows = [['command', job.command], ['cwd', job.cwd], ['queued by', job.queued_by], ['after', (job.after || []).join(', ')], ['preflight', job.preflight], ['exit code', job.exit_code], ['result', job.result ? JSON.stringify(job.result, null, 1) : '']].filter(([, v]) => v !== null && v !== undefined && v !== '');
+    document.getElementById('detail').innerHTML = `<div class="detail"><strong>job ${job.id}</strong> <span class="st st-${job.status}">${job.status}</span> <button id="close">close</button><dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd class="cmd">${esc(v)}</dd>`).join('')}</dl><pre>${esc(log) || '(no output yet)'}</pre></div>`;
+    document.getElementById('close').onclick = () => { selected = null; document.getElementById('detail').innerHTML = ''; };
+  }
+  document.getElementById('rows').addEventListener('click', e => { const c = e.target.dataset.cancel; if (c) { e.stopPropagation(); api('/jobs/' + c + '/cancel', { method: 'POST' }).then(refresh); return; } const tr = e.target.closest('tr.job'); if (tr) showDetail(+tr.dataset.id); });
+  document.getElementById('refresh').onclick = refresh; document.getElementById('filter').onchange = refresh;
+  setInterval(() => { if (document.getElementById('auto').checked) refresh(); }, 2000); refresh();
+</script>
+</body>
+</html>
