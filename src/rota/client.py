@@ -45,15 +45,15 @@ class Client:
 
     def start_daemon(self, wait: float = 15.0) -> None:
         env = {**os.environ, "ROTA_HOME": str(self.data_dir)}
-        log = open(self.data_dir / "daemon.log", "ab")
-        subprocess.Popen(
-            [sys.executable, "-m", "rota", "serve", "--port", str(self.port)],
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-            env=env,
-        )
+        with open(self.data_dir / "daemon.log", "ab") as log:
+            subprocess.Popen(  # the daemon keeps its own copy of the descriptor
+                [sys.executable, "-m", "rota", "serve", "--port", str(self.port)],
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+                env=env,
+            )
         deadline = time.time() + wait
         while time.time() < deadline:
             if self.alive():

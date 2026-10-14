@@ -1,5 +1,6 @@
 """MCP server (stdio) exposing the queue to agents. Every tool returns compact JSON-able data."""
 
+import logging
 import os
 from typing import Any
 
@@ -9,6 +10,8 @@ except ImportError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
 from rota.client import Client
+
+logging.getLogger("httpx").setLevel(logging.WARNING)  # keep request lines out of the agent's stderr
 
 mcp = _Server(
     "rota",

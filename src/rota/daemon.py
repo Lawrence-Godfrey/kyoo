@@ -77,7 +77,7 @@ class Scheduler:
 
     def _run_preflight(self, job: dict[str, Any]) -> bool:
         try:
-            proc = subprocess.run(
+            proc = subprocess.run(  # noqa: PLW1510 - a non-zero exit is the signal, handled below
                 job["preflight"],
                 shell=True,
                 cwd=job["cwd"],
@@ -113,20 +113,19 @@ class Scheduler:
         return False
 
     def _start(self, job: dict[str, Any]) -> None:
-        log = open(self.data_dir / "logs" / f"{job['id']}.log", "ab")
-        log.write(f"# rota job {job['id']}: {job['command']}\n# cwd {job['cwd']}\n".encode())
-        log.flush()
-        proc = subprocess.Popen(
-            job["command"],
-            shell=True,
-            cwd=job["cwd"],
-            env={**os.environ, **job["env"]},
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        log.close()
+        with open(self.data_dir / "logs" / f"{job['id']}.log", "ab") as log:
+            log.write(f"# rota job {job['id']}: {job['command']}\n# cwd {job['cwd']}\n".encode())
+            log.flush()
+            proc = subprocess.Popen(  # the child keeps its own copy of the descriptor
+                job["command"],
+                shell=True,
+                cwd=job["cwd"],
+                env={**os.environ, **job["env"]},
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
         self.processes[job["id"]] = proc
         db.update_job(
             self.conn, job["id"], status="running", started_at=time.time(), pid=proc.pid, error=None
@@ -194,7 +193,7 @@ class Scheduler:
         while not self.stop.is_set():
             try:
                 self.tick()
-            except Exception as e:  # the scheduler must outlive any one bad job
+            except Exception as e:  # noqa: BLE001 - the scheduler must outlive any one bad job
                 print(f"scheduler error: {e!r}", flush=True)
             self.stop.wait(interval)
 
