@@ -3,11 +3,14 @@
 import os
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+try:  # mcp 2.x renamed FastMCP to MCPServer; the tool decorator and run() are the same
+    from mcp.server.mcpserver import MCPServer as _Server
+except ImportError:  # mcp 1.x
+    from mcp.server.fastmcp import FastMCP as _Server
 
 from rota.client import Client
 
-mcp = FastMCP(
+mcp = _Server(
     "rota",
     instructions=(
         "rota is a local job queue. Use enqueue for any command that takes more than a minute or needs a "
