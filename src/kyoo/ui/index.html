@@ -55,8 +55,9 @@
   async function refresh() {
     try {
       const status = document.getElementById('filter').value;
-      const [jobs, locks] = await Promise.all([api('/jobs?limit=200' + (status ? '&status=' + status : '')).then(r => r.json()), api('/locks').then(r => r.json())]);
+      const [health, jobs, locks] = await Promise.all([api('/health').then(r => r.json()), api('/jobs?limit=200' + (status ? '&status=' + status : '')).then(r => r.json()), api('/locks').then(r => r.json())]);
       document.getElementById('sub').textContent = `${jobs.filter(j => j.status === 'running').length} running · ${jobs.filter(j => ['queued', 'held'].includes(j.status)).length} waiting · updated ${new Date().toLocaleTimeString()}`;
+      if (health.scheduler_alive === false) document.getElementById('sub').textContent += ` · SCHEDULER STOPPED (${health.last_error || 'unknown error'}); restart the daemon`;
       document.getElementById('locks').textContent = Object.entries(locks).map(([n, l]) => `${n}: ${l.held_by.length}/${l.capacity}${l.held_by.length ? ' (job ' + l.held_by.join(', ') + ')' : ''}`).join('   ') || 'no locks in use';
       document.getElementById('rows').innerHTML = jobs.map(j => `<tr class="job" data-id="${j.id}"><td>${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`).join('');
       if (selected) showDetail(selected);

@@ -153,3 +153,8 @@ def test_daemon_restart_adopts_running_job(client, tmp_path):
     done = client.wait(job["id"], timeout=20)
     assert done["status"] == "succeeded" and done["exit_code"] == 0 and done["result"] == {"ok": 1}
     assert client.wait(dep["id"], timeout=20)["status"] == "succeeded"
+
+
+def test_health_reports_scheduler(client):
+    h = httpx.get(f"{client.base_url}/health", timeout=2).json()
+    assert h["scheduler_alive"] is True and h["last_error"] is None

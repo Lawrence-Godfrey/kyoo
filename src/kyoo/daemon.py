@@ -48,6 +48,8 @@ class Scheduler:
         self.cancelling: dict[int, float] = {}
         self.lock = threading.RLock()
         self.stop = threading.Event()
+        self.last_error: str | None = None
+        self.thread: threading.Thread | None = None
         self.sync: HubSync | None = (
             HubSync(data_dir, self.conn, self.lock) if HubSync.configured(data_dir) else None
         )
@@ -173,10 +175,12 @@ class Scheduler:
                 result = {"error": f"could not read result file: {e}"}
         if job_id in self.cancelling:
             status, error = "cancelled", "cancelled"
-        elif proc.returncode is None:  # adopted from a daemon that predates exit files
-            ok = not job.get("result_file") or isinstance(result, dict) and "error" not in result
+        elif (
+            proc.returncode is None
+        ):  # adopted from a daemon that predates exit files: trust only a result file
+            ok = bool(job.get("result_file")) and isinstance(result, dict) and "error" not in result
             status = "succeeded" if ok else "failed"
-            error = "finished while the daemon was down; exit code unknown, judged by the result file"
+            error = None if ok else "finished while the daemon was down; exit code unknown"
         else:
             status = "succeeded" if proc.returncode == 0 else "failed"
             error = None if status == "succeeded" else f"exit code {proc.returncode}"
@@ -229,7 +233,11 @@ class Scheduler:
             try:
                 self.tick()
             except Exception as e:  # noqa: BLE001 - the scheduler must outlive any one bad job
-                print(f"scheduler error: {e!r}", flush=True)
+                self.last_error = f"{type(e).__name__}: {e}"[:300]
+                try:
+                    print(f"scheduler error: {e!r}", flush=True)
+                except OSError:  # a full disk fails the log write too; that must not take the loop down
+                    pass
             self.stop.wait(interval)
 
 
@@ -250,6 +258,8 @@ def create_app(scheduler: Scheduler, token: str) -> FastAPI:
             "ok": True,
             "pid": os.getpid(),
             "running": len(scheduler.processes),
+            "scheduler_alive": scheduler.thread.is_alive() if scheduler.thread else None,
+            "last_error": scheduler.last_error,
             "hub": scheduler.sync.status() if scheduler.sync else None,
         }
 
@@ -324,7 +334,8 @@ def create_app(scheduler: Scheduler, token: str) -> FastAPI:
 def serve(port: int, data_dir: Path | None = None, host: str = "127.0.0.1") -> None:
     data_dir = data_dir or paths.data_dir()
     scheduler = Scheduler(data_dir)
-    threading.Thread(target=scheduler.run, name="scheduler", daemon=True).start()
+    scheduler.thread = threading.Thread(target=scheduler.run, name="scheduler", daemon=True)
+    scheduler.thread.start()
     if scheduler.sync is not None:
         threading.Thread(target=scheduler.sync.run, name="hub-sync", daemon=True).start()
     app = create_app(scheduler, paths.token_in(data_dir))
