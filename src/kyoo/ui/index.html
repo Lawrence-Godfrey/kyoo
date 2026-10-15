@@ -66,8 +66,19 @@
     selected = id;
     const [job, log] = await Promise.all([api('/jobs/' + id).then(r => r.json()), api('/jobs/' + id + '/log?tail=200').then(r => r.text())]);
     const rows = [['command', job.command], ['cwd', job.cwd], ['queued by', job.queued_by], ['after', (job.after || []).join(', ')], ['preflight', job.preflight], ['exit code', job.exit_code], ['result', job.result ? JSON.stringify(job.result, null, 1) : '']].filter(([, v]) => v !== null && v !== undefined && v !== '');
-    document.getElementById('detail').innerHTML = `<div class="detail"><strong>job ${job.id}</strong> <span class="st st-${job.status}">${job.status}</span> <button id="close">close</button><dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd class="cmd">${esc(v)}</dd>`).join('')}</dl><pre>${esc(log) || '(no output yet)'}</pre></div>`;
-    document.getElementById('close').onclick = () => { selected = null; document.getElementById('detail').innerHTML = ''; };
+    const detail = document.getElementById('detail'), pre = detail.querySelector('pre');
+    if (selected !== id || !pre || detail.dataset.id !== String(id)) {
+      detail.dataset.id = id;
+      detail.innerHTML = `<div class="detail"><strong>job ${job.id}</strong> <span class="st st-${job.status}" id="dstatus">${job.status}</span> <button id="close">close</button><dl id="drows"></dl><pre></pre></div>`;
+      detail.querySelector('pre').scrollTop = 1e9;
+      document.getElementById('close').onclick = () => { selected = null; detail.dataset.id = ''; detail.innerHTML = ''; };
+    }
+    // Update in place so the log keeps its scroll position; follow the tail only if the reader was already at the bottom.
+    const p = detail.querySelector('pre'), atBottom = p.scrollHeight - p.scrollTop - p.clientHeight < 8 || !p.textContent;
+    const st = document.getElementById('dstatus'); st.textContent = job.status; st.className = `st st-${job.status}`;
+    document.getElementById('drows').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd class="cmd">${esc(v)}</dd>`).join('');
+    const text = log || '(no output yet)';
+    if (p.textContent !== text) { p.textContent = text; if (atBottom) p.scrollTop = p.scrollHeight; }
   }
   document.getElementById('rows').addEventListener('click', e => { const c = e.target.dataset.cancel; if (c) { e.stopPropagation(); api('/jobs/' + c + '/cancel', { method: 'POST' }).then(refresh); return; } const tr = e.target.closest('tr.job'); if (tr) showDetail(+tr.dataset.id); });
   document.getElementById('refresh').onclick = refresh; document.getElementById('filter').onchange = refresh;
