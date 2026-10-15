@@ -28,7 +28,11 @@
   tr:last-child td { border-bottom: 0; } tr.job { cursor: pointer; } tr.job:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   tr.job.open td { background: color-mix(in srgb, var(--accent) 8%, transparent); border-bottom-color: transparent; }
   td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; padding-top: 10px; }
-  .st { font-weight: 600; } .st-queued { color: var(--queued); } .st-held { color: var(--held); } .st-running { color: var(--running); }
+  .st { font-weight: 600; } .st-sub { display: block; font-weight: 400; font-size: 11px; color: var(--muted); line-height: 1.3; white-space: nowrap; }
+  .st-sub a { color: var(--accent); cursor: pointer; text-decoration: none; border-bottom: 1px dotted color-mix(in srgb, var(--accent) 50%, transparent); }
+  @keyframes flash { 0%, 50%, 100% { background: transparent; } 25%, 75% { background: color-mix(in srgb, var(--accent) 28%, transparent); } }
+  tr.flash td { animation: flash 1.2s ease-in-out; }
+  @media (prefers-reduced-motion: reduce) { tr.flash td { animation: none; background: color-mix(in srgb, var(--accent) 20%, transparent); } } .st-queued { color: var(--queued); } .st-held { color: var(--held); } .st-running { color: var(--running); }
   .st-succeeded { color: var(--succeeded); } .st-failed { color: var(--failed); } .st-cancelled, .st-skipped { color: var(--cancelled); }
   .cmd { color: var(--muted); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; }
   .locks span { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; margin-right: 4px; font-size: 12px; font-family: var(--mono); }
@@ -63,7 +67,9 @@
   const setPill = (el, n, word) => { el.textContent = `${n} ${word}`; el.classList.toggle('zero', n === 0); };
   const setWarn = html => { $('warn').hidden = !html; $('warn').innerHTML = html || ''; };
 
+  let flashUntil = 0;  // skip rebuilding rows while a row is flashing, or the animation restarts
   async function refresh() {
+    if (Date.now() < flashUntil) return;
     let health, jobs;
     try { [health, jobs] = await Promise.all([api('/health').then(r => r.json()), api('/jobs?limit=200').then(r => r.json())]); }
     catch (e) { setWarn('<b>Cannot reach the daemon</b>' + esc(e.message) + (token ? '' : '. Open the URL printed by `kyoo ui`; it carries the token')); return; }
@@ -72,9 +78,12 @@
     setPill($('nwait'), jobs.filter(j => ['queued', 'held'].includes(j.status)).length, 'waiting');
     $('tabs').innerHTML = TABS.map(([name, st]) => `<button data-tab="${name}" class="${name === tab ? 'on' : ''}">${name}<small>${st ? jobs.filter(j => st.includes(j.status)).length : jobs.length}</small></button>`).join('');
     const st = TABS.find(([n]) => n === tab)[1], shown = st ? jobs.filter(j => st.includes(j.status)) : jobs;
+    const byId = Object.fromEntries(jobs.map(j => [j.id, j])), running = jobs.filter(j => j.status === 'running');
+    // What a queued job is waiting on: unfinished dependencies, else the running jobs holding a lock it needs (the scheduler checks in that order).
+    const waitingOn = j => { if (j.status !== 'queued') return []; const deps = (j.after || []).filter(id => byId[id] && !['succeeded', 'failed', 'cancelled', 'skipped'].includes(byId[id].status)); return deps.length ? deps : [...new Set(running.filter(r => r.locks.some(l => j.locks.includes(l))).map(r => r.id))]; };
     const openDetail = selected && document.querySelector(`tr.detail[data-id="${selected}"]`);
     const logTop = openDetail ? openDetail.querySelector('pre').scrollTop : 0;  // detaching the row resets its scroll
-    const rows = shown.map(j => `<tr class="job${j.id === selected ? ' open' : ''}" data-id="${j.id}"><td class="num">${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`
+    const rows = shown.map(j => `<tr class="job${j.id === selected ? ' open' : ''}" data-id="${j.id}"><td class="num">${j.id}</td><td class="st st-${j.status}">${j.status}${(w => w.length ? `<span class="st-sub">after ${w.map(id => `<a data-goto="${id}">${id}</a>`).join(', ')}</span>` : '')(waitingOn(j))}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`
       + (j.id === selected ? `<tr class="detail" data-id="${j.id}"><td colspan="7"><div class="detail"><dl></dl><pre></pre></div></td></tr>` : ''));
     // Keep the open detail row's DOM so its log keeps its scroll position; only the job rows are rebuilt.
     $('rows').innerHTML = rows.join('');
@@ -93,10 +102,18 @@
   }
   $('rows').addEventListener('click', e => {
     const c = e.target.dataset.cancel; if (c) { e.stopPropagation(); api('/jobs/' + c + '/cancel', { method: 'POST' }).then(refresh); return; }
+    const g = e.target.dataset.goto; if (g) { e.stopPropagation(); goTo(+g); return; }
     if (e.target.closest('tr.detail')) return;
     const tr = e.target.closest('tr.job'); if (!tr) return;
     selected = selected === +tr.dataset.id ? null : +tr.dataset.id; refresh();
   });
+  async function goTo(id) {
+    let tr = document.querySelector(`tr.job[data-id="${id}"]`);
+    if (!tr) { tab = 'all'; await refresh(); tr = document.querySelector(`tr.job[data-id="${id}"]`); if (!tr) return; }
+    tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    flashUntil = Date.now() + 1300; tr.classList.add('flash');
+    setTimeout(() => tr.classList.remove('flash'), 1300);
+  }
   $('tabs').addEventListener('click', e => { const t = e.target.closest('button')?.dataset.tab; if (!t) return; tab = t; try { localStorage.setItem('kyoo_tab', t); } catch (x) {} refresh(); });
   setInterval(refresh, 2000); refresh();
 </script>
