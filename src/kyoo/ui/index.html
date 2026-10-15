@@ -5,42 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kyoo</title>
 <style>
-  :root { --bg: #fafafa; --fg: #1b1b1b; --muted: #6b6b6b; --line: #e3e3e3; --card: #fff; --accent: #2b6cb0;
-          --queued: #8a6d00; --held: #9c4a00; --running: #1f6f3f; --succeeded: #2b6cb0; --failed: #b42318; --cancelled: #6b6b6b; --skipped: #6b6b6b; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141414; --fg: #ededed; --muted: #9a9a9a; --line: #2a2a2a; --card: #1c1c1c; --accent: #7fb3ff;
-          --queued: #e3b341; --held: #ff9a4a; --running: #5fd38d; --succeeded: #7fb3ff; --failed: #ff7b6b; } }
+  :root { --bg: #fafafa; --fg: #1b1b1b; --muted: #6b6b6b; --faint: #9a9a9a; --line: #e3e3e3; --card: #fff; --card2: #f1f1f1; --accent: #2b6cb0;
+          --queued: #8a6d00; --held: #9c4a00; --running: #1f6f3f; --succeeded: #2b6cb0; --failed: #b42318; --cancelled: #6b6b6b; --skipped: #6b6b6b;
+          --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141414; --fg: #ededed; --muted: #9a9a9a; --faint: #6a6a6a; --line: #2a2a2a; --card: #1c1c1c; --card2: #222; --accent: #7fb3ff;
+          --queued: #e3b341; --held: #ff9a4a; --running: #5fd38d; --succeeded: #7fb3ff; --failed: #ff7b6b; --skipped: #8a8a8a; --cancelled: #8a8a8a; color-scheme: dark; } }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, sans-serif; }
   main { max-width: 1100px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 18px; margin: 0 0 4px; } .sub { color: var(--muted); margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; min-height: 28px; }
+  .wordmark { font-weight: 700; font-size: 15px; letter-spacing: .02em; }
+  .pill { border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 600; background: var(--card2); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .pill.run { color: var(--running); } .pill.wait { color: var(--queued); } .pill.zero { color: var(--faint); font-weight: 500; }
+  .warn { background: color-mix(in srgb, var(--failed) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--failed) 40%, var(--line)); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+  .warn b { color: var(--failed); margin-right: 8px; }
+  .tabs { display: flex; align-items: end; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: -1px; position: relative; z-index: 1; overflow-x: auto; }
+  .tabs button { font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 6px 6px 0 0; white-space: nowrap; }
+  .tabs button.on { background: var(--card); border-color: var(--line); color: var(--fg); font-weight: 600; }
+  .tabs button small { color: var(--faint); margin-left: 5px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 0 8px 8px 8px; overflow: hidden; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
   tr:last-child td { border-bottom: 0; } tr.job { cursor: pointer; } tr.job:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  tr.job.open td { background: color-mix(in srgb, var(--accent) 8%, transparent); border-bottom-color: transparent; }
+  td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; padding-top: 10px; }
   .st { font-weight: 600; } .st-queued { color: var(--queued); } .st-held { color: var(--held); } .st-running { color: var(--running); }
   .st-succeeded { color: var(--succeeded); } .st-failed { color: var(--failed); } .st-cancelled, .st-skipped { color: var(--cancelled); }
-  .cmd { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
-  .locks span { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; margin-right: 4px; font-size: 12px; }
-  pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; max-height: 50vh; font-size: 12px; }
-  .detail { margin: 12px 0; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
-  .detail dt { color: var(--muted); font-size: 12px; } .detail dd { margin: 0 0 8px; }
-  button { font: inherit; padding: 4px 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 6px; cursor: pointer; }
-  .filters { margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .filters label { color: var(--muted); }
-  .locksbar { color: var(--muted); margin-bottom: 10px; }
+  .cmd { color: var(--muted); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+  .locks span { display: inline-block; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; margin-right: 4px; font-size: 12px; font-family: var(--mono); }
+  tr.detail td { padding: 4px 10px 14px 10px; background: color-mix(in srgb, var(--accent) 4%, transparent); cursor: default; }
+  .detail { width: 0; min-width: 100%; }
+  .detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 0 0 10px; }
+  .detail dt { color: var(--muted); font-size: 12px; padding-top: 1px; } .detail dd { margin: 0; min-width: 0; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow: auto; max-height: 50vh; font-size: 12px; margin: 0; }
+  button { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 6px; cursor: pointer; }
   @media (max-width: 700px) { .hide-sm { display: none; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>kyoo</h1>
-  <div class="sub" id="sub">connecting…</div>
-  <div class="locksbar" id="locks"></div>
-  <div class="filters">
-    <label>show</label>
-    <select id="filter"><option value="">all</option><option value="queued,held,running">active</option><option value="running">running</option><option value="queued,held">waiting</option><option value="failed,skipped">failed</option><option value="succeeded">succeeded</option></select>
-    <label><input type="checkbox" id="auto" checked> auto-refresh</label>
-    <button id="refresh">refresh</button>
-  </div>
-  <div id="detail"></div>
+  <div class="bar"><span class="wordmark">kyoo</span><span class="pill run zero" id="nrun">0 running</span><span class="pill wait zero" id="nwait">0 waiting</span></div>
+  <div class="warn" id="warn" hidden></div>
+  <div class="tabs" id="tabs"></div>
   <table><thead><tr><th>id</th><th>status</th><th class="hide-sm">queued</th><th class="hide-sm">took</th><th>locks</th><th>job</th><th></th></tr></thead><tbody id="rows"></tbody></table>
 </main>
 <script>
@@ -51,39 +56,48 @@
   const ago = ts => { if (!ts) return '-'; const s = Math.round(Date.now() / 1000 - ts); return s < 60 ? s + 's' : s < 3600 ? Math.floor(s / 60) + 'm' : Math.floor(s / 3600) + 'h' + String(Math.floor(s % 3600 / 60)).padStart(2, '0'); };
   const took = j => { if (!j.started_at) return '-'; const s = Math.round((j.finished_at || Date.now() / 1000) - j.started_at); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0'); };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = id => document.getElementById(id);
+  const TABS = [['all', null], ['active', ['queued', 'held', 'running']], ['waiting', ['queued', 'held']], ['failed', ['failed', 'skipped']], ['succeeded', ['succeeded']]];
+  let tab = 'all'; try { tab = localStorage.getItem('kyoo_tab') || 'all'; } catch (e) {}
   let selected = null;
+  const setPill = (el, n, word) => { el.textContent = `${n} ${word}`; el.classList.toggle('zero', n === 0); };
+  const setWarn = html => { $('warn').hidden = !html; $('warn').innerHTML = html || ''; };
+
   async function refresh() {
-    try {
-      const status = document.getElementById('filter').value;
-      const [health, jobs, locks] = await Promise.all([api('/health').then(r => r.json()), api('/jobs?limit=200' + (status ? '&status=' + status : '')).then(r => r.json()), api('/locks').then(r => r.json())]);
-      document.getElementById('sub').textContent = `${jobs.filter(j => j.status === 'running').length} running · ${jobs.filter(j => ['queued', 'held'].includes(j.status)).length} waiting · updated ${new Date().toLocaleTimeString()}`;
-      if (health.scheduler_alive === false) document.getElementById('sub').textContent += ` · SCHEDULER STOPPED (${health.last_error || 'unknown error'}); restart the daemon`;
-      document.getElementById('locks').textContent = Object.entries(locks).map(([n, l]) => `${n}: ${l.held_by.length}/${l.capacity}${l.held_by.length ? ' (job ' + l.held_by.join(', ') + ')' : ''}`).join('   ') || 'no locks in use';
-      document.getElementById('rows').innerHTML = jobs.map(j => `<tr class="job" data-id="${j.id}"><td>${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`).join('');
-      if (selected) showDetail(selected);
-    } catch (e) { document.getElementById('sub').textContent = 'cannot reach the daemon (' + e.message + ')' + (token ? '' : ' — open the URL printed by `kyoo ui`, it carries the token'); }
+    let health, jobs;
+    try { [health, jobs] = await Promise.all([api('/health').then(r => r.json()), api('/jobs?limit=200').then(r => r.json())]); }
+    catch (e) { setWarn('<b>Cannot reach the daemon</b>' + esc(e.message) + (token ? '' : '. Open the URL printed by `kyoo ui`; it carries the token')); return; }
+    setWarn(health.scheduler_alive === false ? `<b>Scheduler stopped</b>${esc(health.last_error || 'unknown error')}. Jobs are not being started or finished; restart the daemon.` : '');
+    setPill($('nrun'), jobs.filter(j => j.status === 'running').length, 'running');
+    setPill($('nwait'), jobs.filter(j => ['queued', 'held'].includes(j.status)).length, 'waiting');
+    $('tabs').innerHTML = TABS.map(([name, st]) => `<button data-tab="${name}" class="${name === tab ? 'on' : ''}">${name}<small>${st ? jobs.filter(j => st.includes(j.status)).length : jobs.length}</small></button>`).join('');
+    const st = TABS.find(([n]) => n === tab)[1], shown = st ? jobs.filter(j => st.includes(j.status)) : jobs;
+    const openDetail = selected && document.querySelector(`tr.detail[data-id="${selected}"]`);
+    const rows = shown.map(j => `<tr class="job${j.id === selected ? ' open' : ''}" data-id="${j.id}"><td class="num">${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`
+      + (j.id === selected ? `<tr class="detail" data-id="${j.id}"><td colspan="7"><div class="detail"><dl></dl><pre></pre></div></td></tr>` : ''));
+    // Keep the open detail row's DOM so its log keeps its scroll position; only the job rows are rebuilt.
+    $('rows').innerHTML = rows.join('');
+    if (openDetail) { const slot = document.querySelector(`tr.detail[data-id="${selected}"]`); if (slot) slot.replaceWith(openDetail); }
+    if (selected && shown.some(j => j.id === selected)) showDetail(selected);
   }
   async function showDetail(id) {
-    selected = id;
     const [job, log] = await Promise.all([api('/jobs/' + id).then(r => r.json()), api('/jobs/' + id + '/log?tail=200').then(r => r.text())]);
-    const rows = [['command', job.command], ['cwd', job.cwd], ['queued by', job.queued_by], ['after', (job.after || []).join(', ')], ['preflight', job.preflight], ['exit code', job.exit_code], ['result', job.result ? JSON.stringify(job.result, null, 1) : '']].filter(([, v]) => v !== null && v !== undefined && v !== '');
-    const detail = document.getElementById('detail'), pre = detail.querySelector('pre');
-    if (selected !== id || !pre || detail.dataset.id !== String(id)) {
-      detail.dataset.id = id;
-      detail.innerHTML = `<div class="detail"><strong>job ${job.id}</strong> <span class="st st-${job.status}" id="dstatus">${job.status}</span> <button id="close">close</button><dl id="drows"></dl><pre></pre></div>`;
-      detail.querySelector('pre').scrollTop = 1e9;
-      document.getElementById('close').onclick = () => { selected = null; detail.dataset.id = ''; detail.innerHTML = ''; };
-    }
-    // Update in place so the log keeps its scroll position; follow the tail only if the reader was already at the bottom.
-    const p = detail.querySelector('pre'), atBottom = p.scrollHeight - p.scrollTop - p.clientHeight < 8 || !p.textContent;
-    const st = document.getElementById('dstatus'); st.textContent = job.status; st.className = `st st-${job.status}`;
-    document.getElementById('drows').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd class="cmd">${esc(v)}</dd>`).join('');
+    const box = document.querySelector(`tr.detail[data-id="${id}"] .detail`); if (!box || selected !== id) return;
+    const rows = [['cwd', job.cwd], ['queued by', job.queued_by], ['after', (job.after || []).join(', ')], ['preflight', job.preflight], ['exit code', job.exit_code], ['result', job.result ? JSON.stringify(job.result, null, 1) : '']].filter(([, v]) => v !== null && v !== undefined && v !== '');
+    box.querySelector('dl').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd class="cmd">${esc(v)}</dd>`).join('');
+    // Follow the tail only if the reader was already at the bottom.
+    const p = box.querySelector('pre'), atBottom = p.scrollHeight - p.scrollTop - p.clientHeight < 8 || !p.textContent;
     const text = log || '(no output yet)';
     if (p.textContent !== text) { p.textContent = text; if (atBottom) p.scrollTop = p.scrollHeight; }
   }
-  document.getElementById('rows').addEventListener('click', e => { const c = e.target.dataset.cancel; if (c) { e.stopPropagation(); api('/jobs/' + c + '/cancel', { method: 'POST' }).then(refresh); return; } const tr = e.target.closest('tr.job'); if (tr) showDetail(+tr.dataset.id); });
-  document.getElementById('refresh').onclick = refresh; document.getElementById('filter').onchange = refresh;
-  setInterval(() => { if (document.getElementById('auto').checked) refresh(); }, 2000); refresh();
+  $('rows').addEventListener('click', e => {
+    const c = e.target.dataset.cancel; if (c) { e.stopPropagation(); api('/jobs/' + c + '/cancel', { method: 'POST' }).then(refresh); return; }
+    if (e.target.closest('tr.detail')) return;
+    const tr = e.target.closest('tr.job'); if (!tr) return;
+    selected = selected === +tr.dataset.id ? null : +tr.dataset.id; refresh();
+  });
+  $('tabs').addEventListener('click', e => { const t = e.target.closest('button')?.dataset.tab; if (!t) return; tab = t; try { localStorage.setItem('kyoo_tab', t); } catch (x) {} refresh(); });
+  setInterval(refresh, 2000); refresh();
 </script>
 </body>
 </html>
