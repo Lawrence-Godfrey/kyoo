@@ -1,4 +1,4 @@
-"""The `rota` command."""
+"""The `kyoo` command."""
 
 import json
 import os
@@ -9,8 +9,8 @@ from typing import Annotated
 
 import typer
 
-from rota import __version__, paths
-from rota.client import Client
+from kyoo import __version__, paths
+from kyoo.client import Client
 
 app = typer.Typer(
     help="A local job queue: enqueue commands with locks, dependencies and preflight checks.",
@@ -38,11 +38,11 @@ def _fmt_dur(job: dict) -> str:
 
 
 @app.command()
-def serve(port: int = typer.Option(None, help="Port to listen on (default ROTA_PORT or 7777)")) -> None:
+def serve(port: int = typer.Option(None, help="Port to listen on (default KYOO_PORT or 7777)")) -> None:
     """Run the daemon in the foreground."""
-    from rota.daemon import serve as _serve
+    from kyoo.daemon import serve as _serve
 
-    _serve(port or int(os.environ.get("ROTA_PORT", paths.DEFAULT_PORT)))
+    _serve(port or int(os.environ.get("KYOO_PORT", paths.DEFAULT_PORT)))
 
 
 @app.command()
@@ -119,7 +119,7 @@ def add(
         preflight=preflight,
         result_file=str(result.resolve()) if result else None,
         env=environment,
-        queued_by=os.environ.get("ROTA_QUEUED_BY", f"cli:{os.getlogin() if sys.stdin.isatty() else 'cli'}"),
+        queued_by=os.environ.get("KYOO_QUEUED_BY", f"cli:{os.getlogin() if sys.stdin.isatty() else 'cli'}"),
     )
     typer.echo(f"queued job {job['id']}: {job['description'] or job['command']}")
     if wait:
@@ -233,8 +233,8 @@ def ui(open_browser: Annotated[bool, typer.Option("--open/--no-open")] = True) -
 
 @app.command()
 def mcp() -> None:
-    """Run the MCP server on stdio (register with `claude mcp add rota -- rota mcp`)."""
-    from rota.mcp_server import main
+    """Run the MCP server on stdio (register with `claude mcp add kyoo -- kyoo mcp`)."""
+    from kyoo.mcp_server import main
 
     main()
 
@@ -246,18 +246,18 @@ def install_service() -> None:
     import subprocess
 
     if sys.platform != "linux":
-        typer.echo("only Linux systemd is supported for now; on macOS run `rota start` after login")
+        typer.echo("only Linux systemd is supported for now; on macOS run `kyoo start` after login")
         raise typer.Exit(1)
     unit_dir = Path.home() / ".config" / "systemd" / "user"
     unit_dir.mkdir(parents=True, exist_ok=True)
-    unit = unit_dir / "rota.service"
+    unit = unit_dir / "kyoo.service"
     unit.write_text(
-        "[Unit]\nDescription=rota job queue daemon\n\n[Service]\n"
-        f"ExecStart={sys.executable} -m rota serve\nRestart=on-failure\nEnvironment=ROTA_HOME={paths.data_dir()}\n\n"
+        "[Unit]\nDescription=kyoo job queue daemon\n\n[Service]\n"
+        f"ExecStart={sys.executable} -m kyoo serve\nRestart=on-failure\nEnvironment=KYOO_HOME={paths.data_dir()}\n\n"
         "[Install]\nWantedBy=default.target\n"
     )
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-    subprocess.run(["systemctl", "--user", "enable", "--now", "rota.service"], check=True)
+    subprocess.run(["systemctl", "--user", "enable", "--now", "kyoo.service"], check=True)
     if shutil.which("loginctl"):
         subprocess.run(["loginctl", "enable-linger"], check=False)
     typer.echo(f"installed and started {unit}")

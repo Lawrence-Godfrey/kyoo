@@ -1,4 +1,4 @@
-"""Where rota keeps its state. One directory per user; ROTA_HOME overrides it."""
+"""Where kyoo keeps its state. One directory per user; KYOO_HOME overrides it."""
 
 import os
 import secrets
@@ -9,19 +9,19 @@ DEFAULT_PORT = 7777
 
 
 def data_dir() -> Path:
-    if env := os.environ.get("ROTA_HOME"):
+    if env := os.environ.get("KYOO_HOME"):
         path = Path(env)
     elif sys.platform == "darwin":
-        path = Path.home() / "Library" / "Application Support" / "rota"
+        path = Path.home() / "Library" / "Application Support" / "kyoo"
     else:
-        path = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "rota"
+        path = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "kyoo"
     path.mkdir(parents=True, exist_ok=True)
     (path / "logs").mkdir(exist_ok=True)
     return path
 
 
 def db_path() -> Path:
-    return data_dir() / "rota.db"
+    return data_dir() / "kyoo.db"
 
 
 def log_path(job_id: int) -> Path:

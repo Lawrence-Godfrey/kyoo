@@ -14,7 +14,7 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
-from rota import db, paths
+from kyoo import db, paths
 
 PREFLIGHT_TIMEOUT = 120
 PREFLIGHT_BACKOFF = 60
@@ -26,7 +26,7 @@ class Scheduler:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
         (data_dir / "logs").mkdir(parents=True, exist_ok=True)
-        self.conn = db.connect(data_dir / "rota.db")
+        self.conn = db.connect(data_dir / "kyoo.db")
         self.processes: dict[int, subprocess.Popen] = {}
         self.cancelling: dict[int, float] = {}
         self.lock = threading.RLock()
@@ -114,7 +114,7 @@ class Scheduler:
 
     def _start(self, job: dict[str, Any]) -> None:
         with open(self.data_dir / "logs" / f"{job['id']}.log", "ab") as log:
-            log.write(f"# rota job {job['id']}: {job['command']}\n# cwd {job['cwd']}\n".encode())
+            log.write(f"# kyoo job {job['id']}: {job['command']}\n# cwd {job['cwd']}\n".encode())
             log.flush()
             proc = subprocess.Popen(  # the child keeps its own copy of the descriptor
                 job["command"],
@@ -202,7 +202,7 @@ class Scheduler:
 
 
 def create_app(scheduler: Scheduler, token: str) -> FastAPI:
-    app = FastAPI(title="rota")
+    app = FastAPI(title="kyoo")
     ui_dir = Path(__file__).parent / "ui"
 
     def authed(request: Request) -> None:

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>rota</title>
+<title>kyoo</title>
 <style>
   :root { --bg: #fafafa; --fg: #1b1b1b; --muted: #6b6b6b; --line: #e3e3e3; --card: #fff; --accent: #2b6cb0;
           --queued: #8a6d00; --held: #9c4a00; --running: #1f6f3f; --succeeded: #2b6cb0; --failed: #b42318; --cancelled: #6b6b6b; --skipped: #6b6b6b; }
@@ -31,7 +31,7 @@
 </head>
 <body>
 <main>
-  <h1>rota</h1>
+  <h1>kyoo</h1>
   <div class="sub" id="sub">connecting…</div>
   <div class="locksbar" id="locks"></div>
   <div class="filters">
@@ -60,7 +60,7 @@
       document.getElementById('locks').textContent = Object.entries(locks).map(([n, l]) => `${n}: ${l.held_by.length}/${l.capacity}${l.held_by.length ? ' (job ' + l.held_by.join(', ') + ')' : ''}`).join('   ') || 'no locks in use';
       document.getElementById('rows').innerHTML = jobs.map(j => `<tr class="job" data-id="${j.id}"><td>${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`).join('');
       if (selected) showDetail(selected);
-    } catch (e) { document.getElementById('sub').textContent = 'cannot reach the daemon (' + e.message + ')' + (token ? '' : ' — open the URL printed by `rota ui`, it carries the token'); }
+    } catch (e) { document.getElementById('sub').textContent = 'cannot reach the daemon (' + e.message + ')' + (token ? '' : ' — open the URL printed by `kyoo ui`, it carries the token'); }
   }
   async function showDetail(id) {
     selected = id;

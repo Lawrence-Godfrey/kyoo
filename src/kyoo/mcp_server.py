@@ -9,14 +9,14 @@ try:  # mcp 2.x renamed FastMCP to MCPServer; the tool decorator and run() are t
 except ImportError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
-from rota.client import Client
+from kyoo.client import Client
 
 logging.getLogger("httpx").setLevel(logging.WARNING)  # keep request lines out of the agent's stderr
 
 mcp = _Server(
-    "rota",
+    "kyoo",
     instructions=(
-        "rota is a local job queue. Use enqueue for any command that takes more than a minute or needs a "
+        "kyoo is a local job queue. Use enqueue for any command that takes more than a minute or needs a "
         "shared resource; name the resource as a lock (e.g. gpu0, worktree:myrepo) and the queue serialises "
         "it. Use wait or get to collect results instead of sleeping. Jobs run on the machine the daemon runs on."
     ),
@@ -71,7 +71,7 @@ def enqueue(
         preflight=preflight,
         result_file=result_file,
         env=env or {},
-        queued_by=os.environ.get("ROTA_QUEUED_BY", "mcp"),
+        queued_by=os.environ.get("KYOO_QUEUED_BY", "mcp"),
     )
     return _summary(job)
 

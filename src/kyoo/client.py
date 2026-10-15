@@ -1,4 +1,4 @@
-"""HTTP client for the daemon, with auto-start: if nothing answers, spawn `rota serve` detached and wait for it."""
+"""HTTP client for the daemon, with auto-start: if nothing answers, spawn `kyoo serve` detached and wait for it."""
 
 import os
 import subprocess
@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from rota import db, paths
+from kyoo import db, paths
 
 
 class Client:
@@ -24,7 +24,7 @@ class Client:
         try:
             return int((self.data_dir / "daemon.port").read_text().strip())
         except (FileNotFoundError, ValueError):
-            return int(os.environ.get("ROTA_PORT", paths.DEFAULT_PORT))
+            return int(os.environ.get("KYOO_PORT", paths.DEFAULT_PORT))
 
     @property
     def base_url(self) -> str:
@@ -40,14 +40,14 @@ class Client:
         if self.alive():
             return
         if not self.autostart:
-            raise RuntimeError(f"no rota daemon at {self.base_url}; run `rota start`")
+            raise RuntimeError(f"no kyoo daemon at {self.base_url}; run `kyoo start`")
         self.start_daemon()
 
     def start_daemon(self, wait: float = 15.0) -> None:
-        env = {**os.environ, "ROTA_HOME": str(self.data_dir)}
+        env = {**os.environ, "KYOO_HOME": str(self.data_dir)}
         with open(self.data_dir / "daemon.log", "ab") as log:
             subprocess.Popen(  # the daemon keeps its own copy of the descriptor
-                [sys.executable, "-m", "rota", "serve", "--port", str(self.port)],
+                [sys.executable, "-m", "kyoo", "serve", "--port", str(self.port)],
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
@@ -59,7 +59,7 @@ class Client:
             if self.alive():
                 return
             time.sleep(0.2)
-        raise RuntimeError(f"rota daemon did not come up within {wait}s; see {self.data_dir / 'daemon.log'}")
+        raise RuntimeError(f"kyoo daemon did not come up within {wait}s; see {self.data_dir / 'daemon.log'}")
 
     # ---- API ------------------------------------------------------------------------------------
 

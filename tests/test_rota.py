@@ -8,7 +8,7 @@ import time
 import httpx
 import pytest
 
-from rota.client import Client
+from kyoo.client import Client
 
 
 def _free_port() -> int:
@@ -19,7 +19,7 @@ def _free_port() -> int:
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ROTA_PORT", str(_free_port()))
+    monkeypatch.setenv("KYOO_PORT", str(_free_port()))
     c = Client(data_dir=tmp_path)
     c.ensure()
     yield c
@@ -133,4 +133,4 @@ def test_bad_requests(client, tmp_path):
 
 def test_ui_served(client):
     html = httpx.get(f"{client.base_url}/", timeout=5).text
-    assert "<title>rota</title>" in html
+    assert "<title>kyoo</title>" in html
