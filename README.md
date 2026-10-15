@@ -14,6 +14,16 @@ uvx kyoo install-service                           # optional: a systemd user se
 
 Without `uv`: `pipx install kyoo`, then `kyoo mcp`, `kyoo ui`, and so on.
 
+### Upgrading
+
+`uvx` keeps using the version it first resolved, so pull the new one and restart the daemon:
+
+```
+uvx --refresh kyoo stop && uvx kyoo start
+```
+
+Restarting is safe with jobs running: jobs run in their own process group and write their exit code to a file, so the new daemon adopts the ones still running and finishes them normally. Queued jobs and dependencies are untouched. The MCP server and the web page pick up the new daemon on their next request.
+
 ## Use
 
 ```
@@ -49,6 +59,10 @@ Jobs run as the user who runs the daemon, in the working directory given at enqu
 `kyoo serve` is the daemon: a scheduler thread and an HTTP API on `127.0.0.1:7777`. Every half second it reaps finished processes, then walks the queue in priority order and starts each job whose dependencies have succeeded, whose locks are free and whose preflight passes. The API requires a bearer token stored in the data directory with owner-only permissions, so other users on the machine cannot read or add jobs. Clients (`kyoo`, the MCP server, the page) start the daemon if nothing answers.
 
 Data directory: `~/.local/share/kyoo` on Linux (`$XDG_DATA_HOME/kyoo` if set), `~/Library/Application Support/kyoo` on macOS, or `$KYOO_HOME`. `KYOO_PORT` changes the port.
+
+### Hub (experimental)
+
+`kyoo hub` is a separate server that mirrors job state from many daemons, one step towards a hosted page. It needs `KYOO_HUB_ADMIN_TOKEN`; `POST /machines` with that token returns a machine token, and `kyoo hub-link <url> <token>` points the local daemon at it. The daemon queues every job change in a local outbox and posts it in order, so a hub that is down loses nothing. No sign-in or hosted page yet.
 
 ## Development
 

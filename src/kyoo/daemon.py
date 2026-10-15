@@ -23,12 +23,28 @@ PREFLIGHT_MAX_ATTEMPTS = 10
 KILL_GRACE = 10
 
 
+class _Adopted:
+    """A running job's process group inherited from a previous daemon: pollable, exit code from the exit file."""
+
+    def __init__(self, pid: int, exit_file: Path) -> None:
+        self.pid, self.exit_file, self.returncode = pid, exit_file, None
+
+    def poll(self) -> int | None:
+        try:
+            os.getpgid(self.pid)  # the job's shell leads its own process group, so this fails once it is gone
+            return None
+        except ProcessLookupError:
+            text = self.exit_file.read_text().strip() if self.exit_file.exists() else ""
+            self.returncode = int(text) if text else None
+            return self.returncode if self.returncode is not None else -1
+
+
 class Scheduler:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
         (data_dir / "logs").mkdir(parents=True, exist_ok=True)
         self.conn = db.connect(data_dir / "kyoo.db")
-        self.processes: dict[int, subprocess.Popen] = {}
+        self.processes: dict[int, subprocess.Popen | _Adopted] = {}
         self.cancelling: dict[int, float] = {}
         self.lock = threading.RLock()
         self.stop = threading.Event()
@@ -45,16 +61,13 @@ class Scheduler:
             self.sync.wake()
 
     def _recover(self) -> None:
-        # Jobs marked running by a previous daemon are gone with it; the log says how far they got.
+        # Jobs run in their own session, so they outlive the daemon; adopt the ones still alive.
         for job in db.running_jobs(self.conn):
-            db.update_job(
-                self.conn,
-                job["id"],
-                status="failed",
-                finished_at=time.time(),
-                error="daemon restarted while the job was running",
-            )
-            self._emit(job["id"])
+            handle = _Adopted(job["pid"], self.data_dir / "logs" / f"{job['id']}.exit")
+            if handle.poll() is None or handle.returncode is not None:
+                self.processes[job["id"]] = handle
+            else:
+                self._finish(job["id"], handle)
 
     # ---- job lifecycle --------------------------------------------------------------------------
 
@@ -132,8 +145,10 @@ class Scheduler:
         with open(self.data_dir / "logs" / f"{job['id']}.log", "ab") as log:
             log.write(f"# kyoo job {job['id']}: {job['command']}\n# cwd {job['cwd']}\n".encode())
             log.flush()
+            exit_file = self.data_dir / "logs" / f"{job['id']}.exit"
+            exit_file.unlink(missing_ok=True)
             proc = subprocess.Popen(  # the child keeps its own copy of the descriptor
-                job["command"],
+                f"({job['command']}); rc=$?; echo $rc > {shlex.quote(str(exit_file))}; exit $rc",
                 shell=True,
                 cwd=job["cwd"],
                 env={**os.environ, **job["env"]},
@@ -148,7 +163,7 @@ class Scheduler:
         )
         self._emit(job["id"])
 
-    def _finish(self, job_id: int, proc: subprocess.Popen) -> None:
+    def _finish(self, job_id: int, proc: subprocess.Popen | _Adopted) -> None:
         job = db.get_job(self.conn, job_id) or {}
         result = None
         if job.get("result_file"):
@@ -157,9 +172,14 @@ class Scheduler:
             except (OSError, ValueError) as e:
                 result = {"error": f"could not read result file: {e}"}
         if job_id in self.cancelling:
-            status = "cancelled"
+            status, error = "cancelled", "cancelled"
+        elif proc.returncode is None:  # adopted from a daemon that predates exit files
+            ok = not job.get("result_file") or isinstance(result, dict) and "error" not in result
+            status = "succeeded" if ok else "failed"
+            error = "finished while the daemon was down; exit code unknown, judged by the result file"
         else:
             status = "succeeded" if proc.returncode == 0 else "failed"
+            error = None if status == "succeeded" else f"exit code {proc.returncode}"
         db.update_job(
             self.conn,
             job_id,
@@ -167,11 +187,7 @@ class Scheduler:
             finished_at=time.time(),
             exit_code=proc.returncode,
             result=result,
-            error=None
-            if status == "succeeded"
-            else f"exit code {proc.returncode}"
-            if status == "failed"
-            else "cancelled",
+            error=error,
         )
         self._emit(job_id)
         self.processes.pop(job_id, None)

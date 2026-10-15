@@ -134,3 +134,22 @@ def test_bad_requests(client, tmp_path):
 def test_ui_served(client):
     html = httpx.get(f"{client.base_url}/", timeout=5).text
     assert "<title>kyoo</title>" in html
+
+
+def test_daemon_restart_adopts_running_job(client, tmp_path):
+    result = tmp_path / "r.json"
+    job = client.enqueue(
+        command=f"sleep 3 && echo '{{\"ok\": 1}}' > {result}", cwd=str(tmp_path), result_file=str(result)
+    )
+    dep = client.enqueue(command="echo after", cwd=str(tmp_path), after=[job["id"]])
+    time.sleep(1)
+    pid = httpx.get(f"{client.base_url}/health", timeout=2).json()["pid"]
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.time() + 10
+    while client.alive() and time.time() < deadline:
+        time.sleep(0.1)
+    client.ensure()
+    assert client.get(job["id"])["status"] == "running"
+    done = client.wait(job["id"], timeout=20)
+    assert done["status"] == "succeeded" and done["exit_code"] == 0 and done["result"] == {"ok": 1}
+    assert client.wait(dep["id"], timeout=20)["status"] == "succeeded"
