@@ -73,11 +73,12 @@
     $('tabs').innerHTML = TABS.map(([name, st]) => `<button data-tab="${name}" class="${name === tab ? 'on' : ''}">${name}<small>${st ? jobs.filter(j => st.includes(j.status)).length : jobs.length}</small></button>`).join('');
     const st = TABS.find(([n]) => n === tab)[1], shown = st ? jobs.filter(j => st.includes(j.status)) : jobs;
     const openDetail = selected && document.querySelector(`tr.detail[data-id="${selected}"]`);
+    const logTop = openDetail ? openDetail.querySelector('pre').scrollTop : 0;  // detaching the row resets its scroll
     const rows = shown.map(j => `<tr class="job${j.id === selected ? ' open' : ''}" data-id="${j.id}"><td class="num">${j.id}</td><td class="st st-${j.status}">${j.status}</td><td class="hide-sm">${ago(j.created_at)} ago</td><td class="hide-sm">${took(j)}</td><td class="locks">${(j.locks || []).map(l => '<span>' + esc(l) + '</span>').join('')}</td><td>${esc(j.description) || ''}<div class="cmd">${esc(j.command)}</div>${j.error ? '<div class="cmd st-failed">' + esc(j.error) + '</div>' : ''}</td><td>${['queued', 'held', 'running'].includes(j.status) ? `<button data-cancel="${j.id}">cancel</button>` : ''}</td></tr>`
       + (j.id === selected ? `<tr class="detail" data-id="${j.id}"><td colspan="7"><div class="detail"><dl></dl><pre></pre></div></td></tr>` : ''));
     // Keep the open detail row's DOM so its log keeps its scroll position; only the job rows are rebuilt.
     $('rows').innerHTML = rows.join('');
-    if (openDetail) { const slot = document.querySelector(`tr.detail[data-id="${selected}"]`); if (slot) slot.replaceWith(openDetail); }
+    if (openDetail) { const slot = document.querySelector(`tr.detail[data-id="${selected}"]`); if (slot) { slot.replaceWith(openDetail); openDetail.querySelector('pre').scrollTop = logTop; } }
     if (selected && shown.some(j => j.id === selected)) showDetail(selected);
   }
   async function showDetail(id) {
