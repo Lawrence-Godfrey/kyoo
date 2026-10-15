@@ -239,6 +239,25 @@ def mcp() -> None:
     main()
 
 
+@app.command()
+def hub(
+    port: Annotated[int, typer.Option(help="Port for the hub")] = 8787,
+    hub_dir: Annotated[Path | None, typer.Option(help="State directory (default: <data dir>/hub)")] = None,
+    host: Annotated[str, typer.Option()] = "127.0.0.1",
+) -> None:
+    """Run a hub: receives job snapshots from daemons (needs KYOO_HUB_ADMIN_TOKEN)."""
+    from kyoo.hub import serve as _serve
+
+    _serve(port, hub_dir or paths.data_dir() / "hub", host)
+
+
+@app.command("hub-link")
+def hub_link(url: str, token: str) -> None:
+    """Point this daemon at a hub with a machine token (from the hub's POST /machines, until the link flow exists)."""
+    json.dump({"url": url, "token": token}, (paths.data_dir() / "hub.json").open("w"))
+    typer.echo(f"hub set to {url}; restart the daemon (`kyoo stop && kyoo start`) to begin syncing")
+
+
 @app.command("install-service")
 def install_service() -> None:
     """Install a systemd user service so the daemon outlives logins and reboots (Linux)."""

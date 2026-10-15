@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from kyoo import db, paths
+from kyoo.sync import HubSync
 
 PREFLIGHT_TIMEOUT = 120
 PREFLIGHT_BACKOFF = 60
@@ -31,7 +32,17 @@ class Scheduler:
         self.cancelling: dict[int, float] = {}
         self.lock = threading.RLock()
         self.stop = threading.Event()
+        self.sync: HubSync | None = (
+            HubSync(data_dir, self.conn, self.lock) if HubSync.configured(data_dir) else None
+        )
         self._recover()
+
+    def _emit(self, job_id: int) -> None:
+        # Snapshot the job for the hub sync; cheap when no hub is configured (the outbox is drained unread).
+        job = db.get_job(self.conn, job_id)
+        if job is not None and self.sync is not None:
+            db.outbox_add(self.conn, {"job": job, "ts": time.time()})
+            self.sync.wake()
 
     def _recover(self) -> None:
         # Jobs marked running by a previous daemon are gone with it; the log says how far they got.
@@ -43,6 +54,7 @@ class Scheduler:
                 finished_at=time.time(),
                 error="daemon restarted while the job was running",
             )
+            self._emit(job["id"])
 
     # ---- job lifecycle --------------------------------------------------------------------------
 
@@ -52,6 +64,7 @@ class Scheduler:
                 if db.get_job(self.conn, dep) is None:
                     raise ValueError(f"dependency job {dep} does not exist")
             job_id = db.insert_job(self.conn, **fields)
+            self._emit(job_id)
             return db.get_job(self.conn, job_id)  # type: ignore[return-value]
 
     def cancel(self, job_id: int) -> dict[str, Any]:
@@ -61,6 +74,7 @@ class Scheduler:
                 raise KeyError(job_id)
             if job["status"] in ("queued", "held"):
                 db.update_job(self.conn, job_id, status="cancelled", finished_at=time.time())
+                self._emit(job_id)
             elif job["status"] == "running" and job_id in self.processes:
                 os.killpg(self.processes[job_id].pid, signal.SIGTERM)
                 self.cancelling[job_id] = time.time()
@@ -101,6 +115,7 @@ class Scheduler:
                 preflight_attempts=attempts,
                 error=f"preflight failed {attempts} times; last output: {output[-500:]}",
             )
+            self._emit(job["id"])
         else:
             db.update_job(
                 self.conn,
@@ -110,6 +125,7 @@ class Scheduler:
                 next_attempt_at=time.time() + PREFLIGHT_BACKOFF,
                 error=f"preflight failed: {output[-500:]}",
             )
+            self._emit(job["id"])
         return False
 
     def _start(self, job: dict[str, Any]) -> None:
@@ -130,6 +146,7 @@ class Scheduler:
         db.update_job(
             self.conn, job["id"], status="running", started_at=time.time(), pid=proc.pid, error=None
         )
+        self._emit(job["id"])
 
     def _finish(self, job_id: int, proc: subprocess.Popen) -> None:
         job = db.get_job(self.conn, job_id) or {}
@@ -156,6 +173,7 @@ class Scheduler:
             if status == "failed"
             else "cancelled",
         )
+        self._emit(job_id)
         self.processes.pop(job_id, None)
         self.cancelling.pop(job_id, None)
 
@@ -180,6 +198,7 @@ class Scheduler:
                         finished_at=time.time(),
                         error="a dependency failed or was cancelled",
                     )
+                    self._emit(job["id"])
                     continue
                 if deps == "waiting" or not self._locks_free(job, usage):
                     continue
@@ -211,7 +230,12 @@ def create_app(scheduler: Scheduler, token: str) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "pid": os.getpid(), "running": len(scheduler.processes)}
+        return {
+            "ok": True,
+            "pid": os.getpid(),
+            "running": len(scheduler.processes),
+            "hub": scheduler.sync.status() if scheduler.sync else None,
+        }
 
     @app.get("/")
     def index() -> FileResponse:
@@ -285,6 +309,8 @@ def serve(port: int, data_dir: Path | None = None, host: str = "127.0.0.1") -> N
     data_dir = data_dir or paths.data_dir()
     scheduler = Scheduler(data_dir)
     threading.Thread(target=scheduler.run, name="scheduler", daemon=True).start()
+    if scheduler.sync is not None:
+        threading.Thread(target=scheduler.sync.run, name="hub-sync", daemon=True).start()
     app = create_app(scheduler, paths.token_in(data_dir))
     config = uvicorn.Config(app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)

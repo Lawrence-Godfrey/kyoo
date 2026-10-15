@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS locks (
     name TEXT PRIMARY KEY,
     capacity INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at REAL NOT NULL,
+    payload TEXT NOT NULL
+);
 """
 
 JSON_COLUMNS = ("env", "locks", "after", "result")
@@ -130,3 +135,24 @@ def lock_usage(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
         for name in job["locks"]:
             usage.setdefault(name, {"capacity": 1, "held_by": []})["held_by"].append(job["id"])
     return usage
+
+
+# ---- outbox: job snapshots waiting to be sent to a hub ----
+
+
+def outbox_add(conn: sqlite3.Connection, payload: dict[str, Any]) -> None:
+    conn.execute("INSERT INTO outbox (created_at, payload) VALUES (?, ?)", (time.time(), json.dumps(payload)))
+
+
+def outbox_peek(conn: sqlite3.Connection, limit: int = 100) -> list[tuple[int, dict[str, Any]]]:
+    rows = conn.execute("SELECT id, payload FROM outbox ORDER BY id LIMIT ?", (limit,))
+    return [(int(r["id"]), json.loads(r["payload"])) for r in rows]
+
+
+def outbox_delete(conn: sqlite3.Connection, ids: list[int]) -> None:
+    if ids:
+        conn.execute(f"DELETE FROM outbox WHERE id IN ({', '.join('?' for _ in ids)})", ids)
+
+
+def outbox_size(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0])
