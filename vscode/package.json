@@ -2,7 +2,7 @@
   "name": "kyoo",
   "displayName": "kyoo",
   "description": "Job queue for your machine and your agent: see what is running, what is waiting and why, read logs, cancel.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "lawrence-godfrey",
   "license": "MIT",
   "icon": "media/icon.png",

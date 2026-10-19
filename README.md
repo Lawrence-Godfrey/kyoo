@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/Lawrence-Godfrey/kyoo/main/docs/images/logo.svg" width="64" alt="kyoo logo">
+
 # kyoo
 
 A local job queue for agents and people. Queue a command with the resources it needs and the jobs it must wait for; kyoo runs it when they are free, keeps the log, and records the result. Check on it from the command line, from an MCP server, or from a web page.
@@ -11,6 +13,8 @@ claude mcp add --scope user kyoo -- uvx kyoo mcp   # agents: register the MCP se
 uvx kyoo ui                                        # people: print and open the web page
 uvx kyoo install-service                           # optional: a systemd user service, so the daemon survives logouts and reboots
 ```
+
+In VS Code, install the [kyoo extension](https://marketplace.visualstudio.com/items?itemName=lawrence-godfrey.kyoo) for a sidebar of jobs.
 
 Without `uv`: `pipx install kyoo`, then `kyoo mcp`, `kyoo ui`, and so on.
 
@@ -50,9 +54,25 @@ Jobs run as the user who runs the daemon, in the working directory given at enqu
 
 `enqueue`, `list_jobs`, `get_job` (with an optional log tail), `wait_job`, `tail_log`, `cancel_job`, `locks`, `set_lock_capacity`. Responses are compact: a job is its id, status, description, command, locks, dependencies, exit code, error and result.
 
+Here Claude Code queues a training run that holds the `gpu0` lock and writes its final metrics to a result file. It then queues an evaluation with `after`, so the evaluation starts only if training succeeds, and takes the GPU when training releases it. Each `enqueue` returns straight away with the job's id. The jobs run in the daemon, so they keep going if the agent's session ends.
+
+![Claude Code calling enqueue for a training job and for an evaluation job that depends on it](https://raw.githubusercontent.com/Lawrence-Godfrey/kyoo/main/docs/images/agent-enqueue.png)
+
+When the agent needs the numbers, it calls `wait_job`. The call blocks until the job finishes and returns its final status with the contents of the result file, so the agent does not need to poll or sleep.
+
+![Claude Code calling wait_job on the training job and then the evaluation, both returning succeeded](https://raw.githubusercontent.com/Lawrence-Godfrey/kyoo/main/docs/images/agent-wait.png)
+
 ## Web page
 
-`kyoo ui` prints `http://127.0.0.1:7777/?token=…`. The page lists jobs with their status, age and duration, shows lock usage, and opens a job's details and log on click. It refreshes every two seconds. The token in the URL is read once into session storage, so bookmark the printed URL.
+`kyoo ui` prints `http://127.0.0.1:7777/?token=…`. The page lists jobs with their status, age, duration and locks, with tabs for active, waiting, failed and succeeded jobs. A waiting job shows the job it is waiting on, and clicking that id scrolls to it. Clicking a job expands it in place to show its details and the tail of its log. The page refreshes every two seconds. The token in the URL is read once into session storage, so bookmark the printed URL.
+
+## VS Code
+
+The [kyoo extension](https://marketplace.visualstudio.com/items?itemName=lawrence-godfrey.kyoo) adds a kyoo view to the activity bar, with running and waiting counts in the status bar. It runs on the machine where the daemon runs, so with Remote SSH, install it while connected and it works against the remote daemon.
+
+Below are the two jobs from the agent example while training runs. The section header counts running and waiting jobs, and the evaluation names the job it is waiting on. A job expands to its command, working directory and preflight. Its status row expands further to show when it was queued, how long it ran, its locks, and the jobs it waited on or that waited on it. Open log shows the command's output in an editor tab, following the tail while the job runs.
+
+![The kyoo sidebar in VS Code: training running on the GPU, evaluation waiting on it](https://raw.githubusercontent.com/Lawrence-Godfrey/kyoo/main/docs/images/vscode-sidebar.png)
 
 ## How it works
 
