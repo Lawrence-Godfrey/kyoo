@@ -158,3 +158,19 @@ def test_daemon_restart_adopts_running_job(client, tmp_path):
 def test_health_reports_scheduler(client):
     h = httpx.get(f"{client.base_url}/health", timeout=2).json()
     assert h["scheduler_alive"] is True and h["last_error"] is None
+
+
+def test_concurrent_reads_while_scheduling(client, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    ids = [client.enqueue(command="true", cwd=str(tmp_path), locks=["race"])["id"] for _ in range(20)]
+
+    def hammer(_):
+        for _ in range(12):
+            for i in ids:
+                assert client.get(i)["id"] == i
+            client.list(limit=50)
+            client.locks()
+
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(hammer, range(8)))

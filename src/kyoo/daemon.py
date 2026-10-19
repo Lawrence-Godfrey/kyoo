@@ -46,7 +46,7 @@ class Scheduler:
         self.conn = db.connect(data_dir / "kyoo.db")
         self.processes: dict[int, subprocess.Popen | _Adopted] = {}
         self.cancelling: dict[int, float] = {}
-        self.lock = threading.RLock()
+        self.lock = threading.RLock()  # guards self.conn, which every thread shares
         self.stop = threading.Event()
         self.last_error: str | None = None
         self.thread: threading.Thread | None = None
@@ -295,11 +295,13 @@ def create_app(scheduler: Scheduler, token: str) -> FastAPI:
     @app.get("/jobs", dependencies=[Depends(authed)])
     def list_jobs(status: str | None = Query(None), limit: int = 100) -> list[dict[str, Any]]:
         statuses = tuple(s for s in status.split(",") if s) if status else None
-        return db.list_jobs(scheduler.conn, statuses, limit)
+        with scheduler.lock:
+            return db.list_jobs(scheduler.conn, statuses, limit)
 
     @app.get("/jobs/{job_id}", dependencies=[Depends(authed)])
     def get_job(job_id: int) -> dict[str, Any]:
-        job = db.get_job(scheduler.conn, job_id)
+        with scheduler.lock:
+            job = db.get_job(scheduler.conn, job_id)
         if job is None:
             raise HTTPException(404, f"no job {job_id}")
         return job
@@ -321,12 +323,14 @@ def create_app(scheduler: Scheduler, token: str) -> FastAPI:
 
     @app.get("/locks", dependencies=[Depends(authed)])
     def locks() -> dict[str, Any]:
-        return db.lock_usage(scheduler.conn)
+        with scheduler.lock:
+            return db.lock_usage(scheduler.conn)
 
     @app.put("/locks/{name}", dependencies=[Depends(authed)])
     def set_lock(name: str, body: dict[str, Any]) -> dict[str, Any]:
-        db.set_lock_capacity(scheduler.conn, name, int(body["capacity"]))
-        return {name: db.lock_capacity(scheduler.conn, name)}
+        with scheduler.lock:
+            db.set_lock_capacity(scheduler.conn, name, int(body["capacity"]))
+            return {name: db.lock_capacity(scheduler.conn, name)}
 
     return app
 
