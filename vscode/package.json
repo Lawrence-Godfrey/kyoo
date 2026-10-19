@@ -1,0 +1,150 @@
+{
+  "name": "kyoo",
+  "displayName": "kyoo",
+  "description": "Job queue for your machine and your agent: see what is running, what is waiting and why, read logs, cancel.",
+  "version": "0.1.2",
+  "publisher": "lawrence-godfrey",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lawrence-Godfrey/kyoo"
+  },
+  "homepage": "https://github.com/Lawrence-Godfrey/kyoo#readme",
+  "bugs": {
+    "url": "https://github.com/Lawrence-Godfrey/kyoo/issues"
+  },
+  "keywords": [
+    "job queue",
+    "claude code",
+    "mcp",
+    "agent",
+    "gpu",
+    "remote ssh"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kyoo",
+          "title": "kyoo",
+          "icon": "media/kyoo.svg"
+        }
+      ]
+    },
+    "views": {
+      "kyoo": [
+        {
+          "id": "kyoo.active",
+          "name": "Active"
+        },
+        {
+          "id": "kyoo.recent",
+          "name": "Recent"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "kyoo.active",
+        "contents": "The kyoo daemon is not running on this machine.\n[Start daemon](command:kyoo.start)\nRuns `uvx kyoo start`, which needs uv installed.",
+        "when": "kyoo.down"
+      },
+      {
+        "view": "kyoo.active",
+        "contents": "Nothing running or waiting.",
+        "when": "!kyoo.down"
+      }
+    ],
+    "commands": [
+      {
+        "command": "kyoo.start",
+        "title": "Start daemon",
+        "category": "kyoo"
+      },
+      {
+        "command": "kyoo.refresh",
+        "title": "Refresh",
+        "category": "kyoo",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kyoo.cancel",
+        "title": "Cancel job",
+        "category": "kyoo",
+        "icon": "$(close)"
+      },
+      {
+        "command": "kyoo.openLog",
+        "title": "Open log",
+        "category": "kyoo",
+        "icon": "$(output)"
+      },
+      {
+        "command": "kyoo.reveal",
+        "title": "Go to job",
+        "category": "kyoo"
+      },
+      {
+        "command": "kyoo.openCommand",
+        "title": "Open command",
+        "category": "kyoo"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "kyoo.refresh",
+          "when": "view == kyoo.active || view == kyoo.recent",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "kyoo.openLog",
+          "when": "view =~ /^kyoo\\./ && viewItem =~ /\\bjob\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "kyoo.cancel",
+          "when": "view =~ /^kyoo\\./ && viewItem =~ /\\bactive\\b/",
+          "group": "inline@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "kyoo.cancel",
+          "when": "false"
+        },
+        {
+          "command": "kyoo.openLog",
+          "when": "false"
+        },
+        {
+          "command": "kyoo.reveal",
+          "when": "false"
+        },
+        {
+          "command": "kyoo.openCommand",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "npx @vscode/vsce package --no-dependencies"
+  }
+}
